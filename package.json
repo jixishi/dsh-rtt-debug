@@ -1,0 +1,64 @@
+{
+  "name": "dsh-rtt-debug",
+  "version": "0.1.0",
+  "description": "DSH web plugin: a generic SEGGER RTT debug panel — real-time variable waveform with ruler above, complete RTT log below, fed by three independent sources (RTT log channel, RTT data channel, OpenOCD memory reads).",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "rtt",
+    "segger",
+    "debug",
+    "waveform",
+    "oscilloscope",
+    "sidebar"
+  ],
+  "license": "MIT",
+  "author": "JiXieShi",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "docs",
+    "skills"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "dsh-better-sidebar"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "test": "node --test --test-isolation=none test/parsers.test.ts test/parsers-edit.test.ts test/core.test.ts test/ocd.test.ts test/service.test.ts test/jlink.test.ts test/driver.test.ts test/persistence.test.ts test/layering.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@rolldown/binding-win32-x64-msvc": "^1.2.16",
+    "@types/node": "^24.0.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "react": "^18.3.1",
+    "tsdown": "^0.23.0",
+    "typescript": "^5.9.0"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}

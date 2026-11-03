@@ -1,0 +1,3 @@
+# pnpm-only settings (npm warns on unknown keys, so they stay out of .npmrc).
+# Same sandbox reason as .npmrc: keep every store inside the writable workspace.
+store-dir=.pnpm-store

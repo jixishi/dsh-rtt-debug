@@ -1,0 +1,34 @@
+# Installed dependencies.
+#
+# `lib/` is deliberately NOT ignored: package.json ships it (`files: [lib, ...]`)
+# and the profile loads `lib/index.js` / `lib/client.js` directly, so the built
+# bundles are part of the deliverable, not a local artefact.
+node_modules/
+*.tsbuildinfo
+
+# Local npm/pnpm state (see .npmrc for why these live in the workspace)
+.npm-cache/
+.pnpm-store/
+
+# Editor / OS noise
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
+
+# Local verification and agent state — not deliverables.
+# `.verify/` holds throwaway probes; `.agent-teams/` is team inbox state;
+# `.dsh/` is the plugin's own per-workspace config written at runtime.
+.verify/
+.agent-teams/
+.dsh/
+coordination/
+
+# Tool runtime state, not part of the plugin.
+.mnemon/
+
+# Throwaway verification harness from the 0.2.1 adaptation round.
+_verify021/
+
+# Recovery scratch: the tools and their README are kept, the replay output is not.
+_recover/__pycache__/

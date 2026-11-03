@@ -1,0 +1,29 @@
+# dsh-rtt-debug bundle patch
+#
+# This file is the `dsh.bundle.patch` layer of the package: when the plugin is
+# installed through the official CLI —
+#
+#   dsh plugin --profile web add dsh-rtt-debug
+#
+# — the command reconciles `dsh.profile.bundles` against installed packages and,
+# seeing this declaration, appends `dsh-rtt-debug` to the bundle stack. The
+# profile boot then merges THIS patch (a single `insert` of the plugin row)
+# exactly like a manual cordis.patch.yml mount line.
+#
+# Configuration lives in THIS entry's `config`, not in a settings namespace:
+#
+#   - On DSH 0.2.x, `ctx.configEditor.edit(entry, …)` writes the entry's config
+#     into the active profile patch, which is the supported persistence path
+#     (the settings service no longer has `register`).
+#   - On DSH 0.1.x the plugin still uses its settings namespace, so the config
+#     below stays empty there and the defaults apply.
+#
+# Leaving `config` out entirely is fine: an empty/null config is what the plugin
+# treats as "nothing saved yet", so it starts from its generic defaults and the
+# first save fills this in. Every value (RTT channels and ports, the OpenOCD
+# config path, the J-Link device, the ELF path, the variable parser, sampling
+# limits) is created by the UI rather than assumed here.
+
+- insert:
+    - id: dsh-rtt-debug
+      name: dsh-rtt-debug
