@@ -1,17 +1,24 @@
 /**
- * Client half entry: register the panel as a sidebar page.
+ * Client half entry: register the panel as a sidebar tab.
  *
- * The spec asks for the SAME view on two surfaces (D3), so this module does
- * both registrations against one component:
+ * The spec asks for the same view on two surfaces (D3), but only ONE at a time —
+ * they are alternatives, not both. Expected deployments differ, so both code
+ * paths exist:
  *
- *   - the **native right sidebar** (`ctx.sidebarRightTabs` + the keyed
- *     `sidebar.right.pane.tab` slot) — stage one declares the tab TYPE, stage
- *     two supplies its BODY under the same id;
  *   - the **sidebar workbench** (`ctx.betterSidebar.registerTab`) when that
- *     plugin is installed.
+ *     plugin is installed. It is the preferred owner: better-sidebar hosts
+ *     plugin tabs inside DSH's own right sidebar, so registering here already
+ *     puts the tab where the user expects it;
+ *   - the **native right sidebar** (`ctx.sidebarRightTabs` + the keyed
+ *     `sidebar.right.pane.tab` slot) as the standalone fallback, when the
+ *     workbench plugin is not installed at all.
  *
- * Neither registration is required: if only one host is present the other is
- * skipped, so the plugin degrades instead of failing to activate.
+ * Registering BOTH was a defect: the workbench mirrors plugin tabs into the
+ * native sidebar too, so the sidebar showed two identically-named RTT entries.
+ * `apply` therefore claims exactly one surface (see `surface` below).
+ *
+ * Neither surface is required: if neither host is present the plugin still
+ * activates and simply draws no tab, instead of failing.
  */
 
 import { createElement } from 'react'
@@ -93,6 +100,25 @@ export function apply(ctx: Context): void {
   const panel = (sessionId?: string): ReturnType<typeof createElement> =>
     createElement(RttDebugPanel, sessionId === undefined ? {} : { sessionId })
 
+  /**
+   * Which surface owns the tab.
+   *
+   * The two entries are MUTUALLY EXCLUSIVE, not additive. A registered workbench
+   * tab is not rendered by better-sidebar's own bottom panel only — better-sidebar
+   * hosts plugin tabs inside DSH's native right sidebar as well, so registering
+   * both lights up two identically-named RTT entries in one sidebar.
+   *
+   * The rule the ecosystem uses (better-sidebar's own plugin directory states it
+   * for dsh-ide-git): with better-sidebar present, a plugin registers into the
+   * workbench and lets it own rendering; without it, the plugin falls back to
+   * DSH's native seat (`sidebarRightTabs` + the keyed `sidebar.right.pane.tab`).
+   *
+   * `surface` is shared by both waiting fibers so whichever service resolves
+   * first claims it. The owner is released when its fiber tears down, which lets
+   * the other entry take over instead of leaving the sidebar empty.
+   */
+  let surface: 'native' | 'workbench' | undefined
+
   /* ───────────────────── entry A: native right sidebar ───────────────────── */
 
   // The registry must be awaited as a SERVICE, not via a slot declaration.
@@ -117,37 +143,61 @@ export function apply(ctx: Context): void {
     const slots = injected.get('slots') as SlotRegistry | undefined
     if (slots === undefined) return
 
-    // Stage one: the tab TYPE.
-    const disposeType = tabs.register({
-      id: IMPL_ID,
-      kind: KIND,
-      // No `patterns`: this is a page type, opened by kind rather than by
-      // resource address.
-      priority: 'extension',
-      title: () => t('tab.title'),
-      guide: [{
-        order: 40,
+    // Ordering cannot be relied on: `betterSidebar` is provided synchronously by
+    // the workbench plugin's own activation, but nothing orders that activation
+    // against this one. A plain "if the workbench already claimed it" check would
+    // therefore depend on which fiber ran first, and when the native seat won the
+    // race the sidebar still ended up with two RTT entries.
+    //
+    // So the native seat DEFERS by one macrotask before registering. A workbench
+    // that is going to be there claims `surface` inside that window, and this
+    // entry stands down. When no workbench exists, the deferral costs one tick at
+    // startup and the fallback registers as before.
+    const claim = (): void => {
+      if (surface !== undefined) return
+      // Stage one: the tab TYPE.
+      const disposeType = tabs.register({
+        id: IMPL_ID,
+        kind: KIND,
+        // No `patterns`: this is a page type, opened by kind rather than by
+        // resource address.
+        priority: 'extension',
         title: () => t('tab.title'),
-        description: () => t('tab.description'),
-      }],
-    })
+        guide: [{
+          order: 40,
+          title: () => t('tab.title'),
+          description: () => t('tab.description'),
+        }],
+      })
+      surface = 'native'
+      registerBody(disposeType)
+    }
 
-    // Stage two: the BODY, keyed by the same implementation id.
-    const body = slots.inject('sidebar.right.pane.tab', () => slots.register(
-      {
-        name: 'sidebar.right.pane.tab',
-        key: IMPL_ID,
-        inject: () => ({}),
-      },
-      (props: { tab?: { id?: string } }) => panel(props.tab?.id),
-    ))
+    const registerBody = (disposeType: () => void): void => {
+      // Stage two: the BODY, keyed by the same implementation id.
+      const body = slots.inject('sidebar.right.pane.tab', () => slots.register(
+        {
+          name: 'sidebar.right.pane.tab',
+          key: IMPL_ID,
+          inject: () => ({}),
+        },
+        (props: { tab?: { id?: string } }) => panel(props.tab?.id),
+      ))
 
-    // Release order is unchanged: the body's slot entry goes first, then the tab
-    // type. Both are owned by the waiting fiber (see the comment above).
-    injected.effect(() => () => {
-      body()
-      disposeType()
-    }, 'dsh-rtt-debug: native sidebar tab')
+      // Release order is unchanged: the body's slot entry goes first, then the tab
+      // type. Both are owned by the waiting fiber (see the comment above).
+      //
+      // Handing `surface` back is what makes the exclusivity safe: if the native
+      // seat is torn down while a workbench is present, its `inject` body re-runs,
+      // sees the workbench and stands down for good rather than re-registering.
+      injected.effect(() => () => {
+        body()
+        disposeType()
+        if (surface === 'native') surface = undefined
+      }, 'dsh-rtt-debug: native sidebar tab')
+    }
+
+    setTimeout(claim, 0)
   })
 
   /* ───────────────────── entry B: sidebar workbench ─────────────────────── */
@@ -170,14 +220,29 @@ export function apply(ctx: Context): void {
     const workbench = injected.get('betterSidebar') as WorkbenchRegistry | undefined
     if (workbench === undefined) return
 
-    injected.effect(() => workbench.registerTab({
-      id: `${IMPL_ID}:panel`,
-      title: () => t('tab.title'),
-      description: () => t('tab.description'),
-      order: 70,
-      single: true,
-      component: () => panel(),
-    }), 'dsh-rtt-debug: workbench tab')
+    // The workbench wins whenever it exists; the native seat stands down (see
+    // `surface`). This is the branch that used to run in parallel with entry A
+    // and put a second RTT in the sidebar.
+    if (surface !== undefined) return
+
+    // `effect` ties the registration to the waiting fiber and owns its removal,
+    // so there is no separate disposer to hold: returning the unregister through
+    // the effect callback is enough, and the ownership flag is released here.
+    injected.effect(() => {
+      const unregister = workbench.registerTab({
+        id: `${IMPL_ID}:panel`,
+        title: () => t('tab.title'),
+        description: () => t('tab.description'),
+        order: 70,
+        single: true,
+        component: () => panel(),
+      })
+      surface = 'workbench'
+      return () => {
+        unregister()
+        if (surface === 'workbench') surface = undefined
+      }
+    }, 'dsh-rtt-debug: workbench tab')
   })
 
   ctx.effect(() => () => {

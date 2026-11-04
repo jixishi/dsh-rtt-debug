@@ -46,7 +46,7 @@
   "scripts": {
     "build": "tsdown",
     "watch": "tsdown --watch",
-    "test": "node --test --test-isolation=none test/parsers.test.ts test/parsers-edit.test.ts test/core.test.ts test/ocd.test.ts test/service.test.ts test/jlink.test.ts test/driver.test.ts test/persistence.test.ts test/layering.test.ts",
+    "test": "node --test --test-isolation=none test/parsers.test.ts test/parsers-edit.test.ts test/core.test.ts test/ocd.test.ts test/service.test.ts test/jlink.test.ts test/driver.test.ts test/persistence.test.ts test/layering.test.ts test/client-exclusive.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
